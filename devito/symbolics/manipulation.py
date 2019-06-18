@@ -4,19 +4,75 @@ from functools import singledispatch
 
 import sympy
 <<<<<<< HEAD
+<<<<<<< HEAD
 from sympy import Number, Indexed, Symbol, LM, LC
 from sympy.core.add import _addsort
 from sympy.core.mul import _mulsort
 =======
 from sympy import Number, Indexed, Symbol, LM, LC, Expr
 >>>>>>> dse: Blocked limits work after testing
+=======
+from sympy import Number, Indexed, Symbol, LM, LC
+>>>>>>> dse: Rebase and minor
 
 from devito.symbolics.search import retrieve_indexed, retrieve_functions
 from devito.tools import as_tuple, flatten, split
 from devito.types.equation import Eq
 
+<<<<<<< HEAD
 __all__ = ['yreplace', 'xreplace_indices', 'pow_to_mul', 'as_symbol', 'indexify',
            'split_affine', 'subs_op_args', 'uxreplace', 'aligned_indices']
+=======
+__all__ = ['freeze', 'unfreeze', 'evaluate', 'xreplace_constrained', 'xreplace_indices',
+           'pow_to_mul', 'as_symbol', 'indexify', 'split_affine']
+
+
+def freeze(expr):
+    """
+    Reconstruct ``expr`` turning all sympy.Mul and sympy.Add
+    into FrozenExpr equivalents.
+    """
+    if expr.is_Atom or expr.is_Indexed:
+        return expr
+    elif expr.is_Add:
+        rebuilt_args = [freeze(e) for e in expr.args]
+        return Add(*rebuilt_args, evaluate=False)
+    elif expr.is_Mul:
+        rebuilt_args = [freeze(e) for e in expr.args]
+        return Mul(*rebuilt_args, evaluate=False)
+    elif expr.is_Pow:
+        rebuilt_args = [freeze(e) for e in expr.args]
+        return Pow(*rebuilt_args, evaluate=False)
+    elif expr.is_Equality:
+        rebuilt_args = [freeze(e) for e in expr.args]
+        if isinstance(expr, FrozenExpr):
+            # Avoid dropping metadata associated with /expr/
+            return expr.func(*rebuilt_args)
+        else:
+            return Eq(*rebuilt_args, evaluate=False)
+    else:
+        return expr.func(*[freeze(e) for e in expr.args])
+
+
+def unfreeze(expr):
+    """
+    Reconstruct ``expr`` turning all FrozenExpr subtrees into their
+    SymPy equivalents.
+    """
+    if expr.is_Atom or expr.is_Indexed:
+        return expr
+    func = expr.func.__base__ if isinstance(expr, FrozenExpr) else expr.func
+    return func(*[unfreeze(e) for e in expr.args])
+
+
+def evaluate(expr, **subs):
+    """
+    Numerically evaluate a SymPy expression. Subtrees of type FrozenExpr
+    are forcibly evaluated.
+    """
+    expr = unfreeze(expr)
+    return expr.subs(subs)
+>>>>>>> dse: Rebase and minor
 
 
 def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eager=False):
@@ -297,8 +353,7 @@ def as_symbol(expr):
         return Symbol(expr)
     elif isinstance(expr, Dimension):
         return Symbol(expr.name)
-    elif (isinstance(expr, sympy.mul.Mul) and isinstance(expr.args[0], Number)
-          and isinstance(expr.args[1], Dimension)):
+    elif (isinstance(expr.args[0], Number) and isinstance(expr.args[1], Dimension)):
         return expr
     elif expr.is_Symbol:
         return expr
