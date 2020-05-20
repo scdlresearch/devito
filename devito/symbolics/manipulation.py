@@ -15,7 +15,7 @@ __all__ = ['yreplace', 'xreplace_indices', 'pow_to_mul', 'as_symbol', 'indexify'
            'split_affine', 'uxreplace', 'aligned_indices']
 
 
-def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eager=False):
+def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eager=False, A=False):
     """
     Unlike SymPy's ``xreplace``, which performs structural replacement based on a mapper,
     ``yreplace`` applies replacements using two callbacks:
@@ -103,9 +103,14 @@ def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eag
                     return rebuilt, False
                 else:
                     # E.g.: a*b*c*d -> a*r0*r1*r2
-                    replaced = [replace(e) for e in matching if costmodel(e)]
-                    unreplaced = [e for e in matching if not costmodel(e)]
-                    rebuilt = expr.func(*(other + replaced + unreplaced), evaluate=False)
+                    replaceable, unreplaced = split(matching, lambda e: costmodel(e))
+                    replaced = expr.func(*replaceable, evaluate=False)
+                    if costmodel(replaced):
+                        rebuilt = expr.func(*([replace(replaced)] + unreplaced), evaluate=False)
+                    else:
+                        # Fallback
+                        replaced = [replace(e) for e in matching if costmodel(e)]
+                        rebuilt = expr.func(*(other + replaced + unreplaced), evaluate=False)
                     return rebuilt, False
             else:
                 replaceable, unreplaced = split(matching, lambda e: costmodel(e))

@@ -84,7 +84,7 @@ def cire(cluster, template, mode, options, platform):
         model = lambda e: estimate_cost(e, True) >= min_cost_inv
         ignore_collected = lambda g: False
         selector = lambda c, n: c >= min_cost_inv and n >= 1
-        return extractor, model, ignore_collected, selector
+        return extractor, model, ignore_collected, selector, False
 
     def callbacks_sops(context, n):
         min_cost_sops = min_cost['sops']
@@ -102,7 +102,7 @@ def cire(cluster, template, mode, options, platform):
         model = lambda e: not (q_leaf(e) or q_terminalop(e, depth-1))
         ignore_collected = lambda g: len(g) <= 1
         selector = lambda c, n: c >= min_cost_sops and n > 1
-        return extractor, model, ignore_collected, selector
+        return extractor, model, ignore_collected, selector, True
 
     callbacks_mapper = {
         'invariants': callbacks_invariants,
@@ -114,10 +114,12 @@ def cire(cluster, template, mode, options, platform):
     context = cluster.exprs
     for n in reversed(range(repeats[mode])):
         # Get the callbacks
-        extractor, model, ignore_collected, selector = callbacks_mapper[mode](context, n)
+        extractor, model, ignore_collected, selector, A = callbacks_mapper[mode](context, n)
 
         # Extract potentially aliasing expressions
-        exprs, extracted = extract(cluster, extractor, model, template)
+        exprs, extracted = extract(cluster, extractor, model, template, A)
+        if mode == 'sops':
+            from IPython import embed; embed()
         if not extracted:
             # Do not waste time
             continue
@@ -154,7 +156,7 @@ def cire(cluster, template, mode, options, platform):
     return processed
 
 
-def extract(cluster, rule1, model, template):
+def extract(cluster, rule1, model, template, A):
     make = lambda: Scalar(name=template(), dtype=cluster.dtype).indexify()
 
     # Rule out symbols inducing Dimension-independent data dependences
@@ -163,8 +165,9 @@ def extract(cluster, rule1, model, template):
 
     # Composite extraction rule -- correctness(0) + logic(1)
     rule = lambda e: rule0(e) and rule1(e)
+    print(exclude)
 
-    return yreplace(cluster.exprs, make, rule, model, eager=True)
+    return yreplace(cluster.exprs, make, rule, model, A=A)
 
 
 def collect(exprs, min_storage, ignore_collected):
