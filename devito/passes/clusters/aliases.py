@@ -118,8 +118,6 @@ def cire(cluster, template, mode, options, platform):
 
         # Extract potentially aliasing expressions
         exprs, extracted = extract(cluster, extractor, model, template, A)
-        if mode == 'sops':
-            from IPython import embed; embed()
         if not extracted:
             # Do not waste time
             continue
@@ -165,7 +163,6 @@ def extract(cluster, rule1, model, template, A):
 
     # Composite extraction rule -- correctness(0) + logic(1)
     rule = lambda e: rule0(e) and rule1(e)
-    print(exclude)
 
     return yreplace(cluster.exprs, make, rule, model, A=A)
 
@@ -368,7 +365,7 @@ def process(cluster, chosen, aliases, template, platform):
         halo = [(abs(i.lower), abs(i.upper)) for i in writeto]
 
         # The memory scope of the Array
-        scope = 'stack' if any(d.is_Incr for d in writeto.dimensions) else 'heap'
+        scope = 'heap'
 
         # Finally create the temporary Array that will store `alias`
         array = Array(name=template(), dimensions=dimensions, halo=halo,
