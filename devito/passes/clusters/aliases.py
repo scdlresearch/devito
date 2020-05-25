@@ -186,7 +186,7 @@ class CallbacksSOPS(Callbacks):
         #   add(mul(add(mul, mul, ...), ...), ...) -> stems from second order derivative
         # To search the muls in the former case, we need `depth=0`; to search the outer
         # muls in the latter case, we need `depth=2`
-        depth = 2*n
+        depth = 2*n + 2
 
         exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
         rule0 = lambda e: not e.free_symbols & exclude
@@ -194,27 +194,29 @@ class CallbacksSOPS(Callbacks):
         rule = lambda e: rule0(e) and rule1(e)
 
         processed = []
-        extracted = []
+        extracted = OrderedDict()
+        mapper = {}
         for e in cluster.exprs:
-            mapper = {}
             for i in search(e, rule, 'all', 'bfs_first_hit'):
-                coeffs = [a for a in i.args if a.is_Number]
-                if coeffs:
-                    terms, others = split(i.args, lambda a: a not in coeffs)
-                else:
-                    # Perhaps custom derivatives with coefficients supplied as
-                    # Functions. Might happen if not harnessing the full potential
-                    # of the DSL -- that's OK, we still support this case, but
-                    # we might extract a bit less, e.g.
-                    # `a[x]*c[x]*(0.9*f[x] + 0.3*f[x+1] + ...) + a[x+1]*c[x+1]*(...)`
-                    # we can't know if it's `a[x]` or `c[x]` carrying the coefficient
-                    # of the outer derivative, so we will only extract the SOP
-                    # within parentheses
-                    terms, others = split(i.args, lambda a: a.is_Add)
-                temp = make()
-                extracted.append(e.func(temp, i.func(*terms, evaluate=False)))
-                mapper[i] = i.func(temp, *others, evaluate=False)
+                if i in mapper:
+                    continue
+
+                # Rule out what potentially is the coefficient of the
+                # derivative term that we want to extract
+                # E.g., `a[x]*0.2*<sop>` -- only retain `<sop>`
+                maybe_coeffs = [a for a in i.args if q_leaf(a)]
+                terms, others = split(i.args, lambda a: a not in maybe_coeffs)
+                if terms:
+                    k = i.func(*terms)
+                    try:
+                        symbol = extracted[k]
+                    except KeyError:
+                        symbol = extracted.setdefault(k, make())
+                    mapper[i] = i.func(symbol, *others)
             processed.append(uxreplace(e, mapper))
+
+        # TODO
+        extracted = [e.func(v, k) for k, v in extracted.items()]
 
         return extracted + processed, extracted
 
@@ -224,7 +226,7 @@ class CallbacksSOPS(Callbacks):
 
     @classmethod
     def selector(cls, min_cost, cost, naliases):
-        return cost >= min_cost and n > 1
+        return cost >= min_cost and naliases > 1
 
 
 callbacks_mapper = {
@@ -334,7 +336,6 @@ def collect(exprs, min_storage, ignore_collected):
         mapper.setdefault(k, []).append(group)
 
     aliases = Aliases()
-    A = mapper
     for _groups in list(mapper.values()):
         groups = list(_groups)
 
