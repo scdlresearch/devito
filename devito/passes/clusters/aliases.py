@@ -8,8 +8,8 @@ from devito.ir import (ROUNDABLE, DataSpace, IterationInstance, Interval, Interv
 from devito.passes.clusters.utils import cluster_pass, make_is_time_invariant
 from devito.symbolics import (compare_ops, estimate_cost, q_constant, q_leaf,
                               q_sum_of_product, q_terminalop, retrieve_indexed,
-                              uxreplace, yreplace)
-from devito.tools import flatten
+                              search, uxreplace, yreplace)
+from devito.tools import flatten, split
 from devito.types import Array, Eq, ShiftedDimension, Scalar
 
 __all__ = ['cire']
@@ -74,35 +74,81 @@ def cire(cluster, template, mode, options, platform):
     assert mode in ['invariants', 'sops']
     assert all(i >= 0 for i in repeats.values())
 
+    # To create unique (temporary) symbols
+    make = lambda: Scalar(name=template(), dtype=cluster.dtype).indexify()
+
+    # To rule out extractions inducing Dimension-independent data dependences
+    def make_rule0(cluster):
+        exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
+        return lambda e: not e.free_symbols & exclude
+
     # Setup callbacks
     def callbacks_invariants(context, n):
         min_cost_inv = min_cost['invariants']
         if callable(min_cost_inv):
             min_cost_inv = min_cost_inv(n)
 
-        extractor = make_is_time_invariant(context)
-        model = lambda e: estimate_cost(e, True) >= min_cost_inv
+        def extract(cluster):
+            rule0 = make_rule0(cluster)
+            rule1 = make_is_time_invariant(context)
+            rule = lambda e: rule0(e) and rule1(e)
+
+            model = lambda e: estimate_cost(e, True) >= min_cost_inv
+
+            return yreplace(cluster.exprs, make, rule, model, eager=True)
+
         ignore_collected = lambda g: False
         selector = lambda c, n: c >= min_cost_inv and n >= 1
-        return extractor, model, ignore_collected, selector
+
+        return extract, ignore_collected, selector
 
     def callbacks_sops(context, n):
-        min_cost_sops = min_cost['sops']
-        if callable(min_cost_sops):
-            min_cost_sops = min_cost_sops(n)
-
         # The `depth` determines "how big" the extracted sum-of-products will be.
         # We observe that in typical FD codes:
         #   add(mul, mul, ...) -> stems from first order derivative
         #   add(mul(add(mul, mul, ...), ...), ...) -> stems from second order derivative
-        # To catch the former, we would need `depth=1`; for the latter, `depth=3`
-        depth = 2*n + 1
+        # To search the muls in the former case, we need `depth=0`; to search the outer
+        # muls in the latter case, we need `depth=2`
+        depth = 2*n
 
-        extractor = lambda e: q_sum_of_product(e, depth)
-        model = lambda e: not (q_leaf(e) or q_terminalop(e, depth-1))
+        min_cost_sops = min_cost['sops']
+        if callable(min_cost_sops):
+            min_cost_sops = min_cost_sops(n)
+
+        def extract(cluster):
+            rule0 = make_rule0(cluster)
+            rule1 = lambda e: q_sum_of_product(e, depth) and e.is_Mul
+            rule = lambda e: rule0(e) and rule1(e)
+
+            processed = []
+            extracted = []
+            for e in cluster.exprs:
+                mapper = {}
+                for i in search(e, rule, 'all', 'bfs_first_hit'):
+                    coeffs = [a for a in i.args if a.is_Number]
+                    if coeffs:
+                        terms, others = split(i.args, lambda a: a not in coeffs)
+                    else:
+                        # Perhaps custom derivatives with coefficients supplied as
+                        # Functions. Might happen if not harnessing the full potential
+                        # of the DSL -- that's OK, we still support this case, but
+                        # we might extract a bit less, e.g.
+                        # `a[x]*c[x]*(0.9*f[x] + 0.3*f[x+1] + ...) + a[x+1]*c[x+1]*(...)`
+                        # we can't know if it's `a[x]` or `c[x]` carrying the coefficient
+                        # of the outer derivative, so we will only extract the SOP
+                        # within parentheses
+                        terms, others = split(i.args, lambda a: a.is_Add)
+                    temp = make()
+                    extracted.append(e.func(temp, i.func(*terms, evaluate=False)))
+                    mapper[i] = i.func(temp, *others, evaluate=False)
+                processed.append(uxreplace(e, mapper))
+
+            return processed, extracted
+
         ignore_collected = lambda g: len(g) <= 1
         selector = lambda c, n: c >= min_cost_sops and n > 1
-        return extractor, model, ignore_collected, selector
+
+        return extract, ignore_collected, selector
 
     callbacks_mapper = {
         'invariants': callbacks_invariants,
@@ -114,10 +160,10 @@ def cire(cluster, template, mode, options, platform):
     context = cluster.exprs
     for n in reversed(range(repeats[mode])):
         # Get the callbacks
-        extractor, model, ignore_collected, selector = callbacks_mapper[mode](context, n)
+        extract, ignore_collected, selector = callbacks_mapper[mode](context, n)
 
         # Extract potentially aliasing expressions
-        exprs, extracted = extract(cluster, extractor, model, template)
+        exprs, extracted = extract(cluster)
         if not extracted:
             # Do not waste time
             continue
@@ -152,19 +198,6 @@ def cire(cluster, template, mode, options, platform):
     processed.append(cluster)
 
     return processed
-
-
-def extract(cluster, rule1, model, template):
-    make = lambda: Scalar(name=template(), dtype=cluster.dtype).indexify()
-
-    # Rule out symbols inducing Dimension-independent data dependences
-    exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
-    rule0 = lambda e: not e.free_symbols & exclude
-
-    # Composite extraction rule -- correctness(0) + logic(1)
-    rule = lambda e: rule0(e) and rule1(e)
-
-    return yreplace(cluster.exprs, make, rule, model, eager=True)
 
 
 def collect(exprs, min_storage, ignore_collected):

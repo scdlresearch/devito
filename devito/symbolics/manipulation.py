@@ -75,13 +75,13 @@ def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eag
         elif expr.is_Pow:
             base, flag = run(expr.base)
             if flag:
-                if costmodel(base):
-                    return expr.func(replace(base), expr.exp, evaluate=False), False
-                elif costmodel(expr):
-                    return replace(expr), False
-                else:
-                    # If `rule(expr)`, keep searching for larger expressions
-                    return expr.func(base, expr.exp, evaluate=False), rule(expr)
+                if eager:
+                    if costmodel(base):
+                        return expr.func(replace(base), expr.exp, evaluate=False), False
+                    elif costmodel(expr):
+                        return replace(expr), False
+                # If `rule(expr)`, keep searching for larger expressions
+                return expr.func(base, expr.exp, evaluate=False), rule(expr)
             else:
                 return expr.func(base, expr.exp, evaluate=False), False
         else:
@@ -92,7 +92,7 @@ def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eag
             if not matching:
                 return expr.func(*other, evaluate=False), False
 
-            if eager is False:
+            if not eager:
                 matched = expr.func(*matching, evaluate=False)
                 if len(matching) == len(children) and rule(expr):
                     # Keep searching for larger expressions
