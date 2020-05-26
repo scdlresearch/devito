@@ -102,9 +102,14 @@ def yreplace(exprs, make, rule=None, costmodel=lambda e: True, repeat=False, eag
                     rebuilt = expr.func(*(other + [replace(matched)]), evaluate=False)
                     return rebuilt, False
                 else:
-                    # E.g.: a*b*c*d -> a*r0*r1*r2
-                    replaced = [replace(e) for e in matching if costmodel(e)]
-                    unreplaced = [e for e in matching if not costmodel(e)]
+                    replaceable, unreplaced = split(matching, lambda e: costmodel(e))
+                    matched = expr.func(*replaceable, evaluate=False)
+                    if rule(matched) and costmodel(matched):
+                        # E.g.: a*b*c*d -> a*r0*d
+                        replaced = [replace(matched)]
+                    else:
+                        # E.g.: a*b*c*d -> a*r0*r1*r2
+                        replaced = [replace(e) for e in matching if costmodel(e)]
                     rebuilt = expr.func(*(other + replaced + unreplaced), evaluate=False)
                     return rebuilt, False
             else:

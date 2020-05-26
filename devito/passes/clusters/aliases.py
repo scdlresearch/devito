@@ -194,13 +194,13 @@ class CallbacksSOPS(Callbacks):
         rule = lambda e: rule0(e) and rule1(e)
 
         def model(e):
-            if q_sum_of_product(e, depth-1):
-                return False
+            if e.is_Add:
+                return not q_sum_of_product(e, depth-1)
             elif e.is_Mul:
                 # E.g., 0.5*cos(a[x])*(0.2*u[x] - 0.2*u[x+1]) -> (0.2*u[x] - 0.2*u[x+1])
-                return not any(q_leaf(a) for a in e.args)
+                return not q_sum_of_product(e, depth) and not any(q_leaf(a) for a in e.args)
             else:
-                return True
+                return False
 
         return yreplace(cluster.exprs, make, rule, model, eager=False)
 
