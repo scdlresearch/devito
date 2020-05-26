@@ -193,6 +193,11 @@ class CallbacksSOPS(Callbacks):
         rule1 = lambda e: q_sum_of_product(e, depth) and e.is_Mul
         rule = lambda e: rule0(e) and rule1(e)
 
+        from IPython import embed; embed()
+        model = lambda e: 
+
+        #candidates = search(cluster.exprs, rule, 'all', 'bfs_first_hit')
+
         processed = []
         extracted = OrderedDict()
         mapper = {}
