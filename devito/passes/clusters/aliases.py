@@ -186,44 +186,20 @@ class CallbacksSOPS(Callbacks):
         #   add(mul(add(mul, mul, ...), ...), ...) -> stems from second order derivative
         # To search the muls in the former case, we need `depth=0`; to search the outer
         # muls in the latter case, we need `depth=2`
-        depth = 2*n + 2
+        depth = 2*n + 1
 
         exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
         rule0 = lambda e: not e.free_symbols & exclude
-        rule1 = lambda e: q_sum_of_product(e, depth) and e.is_Mul
+        rule1 = lambda e: q_sum_of_product(e, depth)
         rule = lambda e: rule0(e) and rule1(e)
 
         from IPython import embed; embed()
-        model = lambda e: 
+        def model(e):
+            if e.is_Mul:
+                return not q_sum_of_product(e, depth-1) and not any(q_leaf(a) for a in e.args)
+            return not (q_leaf(e) or q_terminalop(e, depth-1))
 
-        #candidates = search(cluster.exprs, rule, 'all', 'bfs_first_hit')
-
-        processed = []
-        extracted = OrderedDict()
-        mapper = {}
-        for e in cluster.exprs:
-            for i in search(e, rule, 'all', 'bfs_first_hit'):
-                if i in mapper:
-                    continue
-
-                # Rule out what potentially is the coefficient of the
-                # derivative term that we want to extract
-                # E.g., `a[x]*0.2*<sop>` -- only retain `<sop>`
-                maybe_coeffs = [a for a in i.args if q_leaf(a)]
-                terms, others = split(i.args, lambda a: a not in maybe_coeffs)
-                if terms:
-                    k = i.func(*terms)
-                    try:
-                        symbol = extracted[k]
-                    except KeyError:
-                        symbol = extracted.setdefault(k, make())
-                    mapper[i] = i.func(symbol, *others)
-            processed.append(uxreplace(e, mapper))
-
-        # TODO
-        extracted = [e.func(v, k) for k, v in extracted.items()]
-
-        return extracted + processed, extracted
+        return yreplace(cluster.exprs, make, rule, model, eager=False)
 
     @classmethod
     def ignore_collected(cls, group):
