@@ -186,23 +186,36 @@ class CallbacksSOPS(Callbacks):
         #   add(mul(add(mul, mul, ...), ...), ...) -> stems from second order derivative
         # To search the muls in the former case, we need `depth=0`; to search the outer
         # muls in the latter case, we need `depth=2`
-        depth = 2*n + 1
+        depth = n
 
         exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
         rule0 = lambda e: not e.free_symbols & exclude
-        rule1 = lambda e: q_sum_of_product(e, depth)
+        rule1 = lambda e: e.is_Mul and q_terminalop(e, depth)
         rule = lambda e: rule0(e) and rule1(e)
 
-        def model(e):
-            if e.is_Add:
-                return not q_sum_of_product(e, depth-1)
-            elif e.is_Mul:
-                # E.g., 0.5*cos(a[x])*(0.2*u[x] - 0.2*u[x+1]) -> (0.2*u[x] - 0.2*u[x+1])
-                return not q_sum_of_product(e, depth) and not any(q_leaf(a) for a in e.args)
-            else:
-                return False
+        extracted = OrderedDict()
+        mapper = {}
+        for e in cluster.exprs:
+            for i in search(e, rule, 'all', 'bfs_first_hit'):
+                if i in mapper:
+                    continue
 
-        return yreplace(cluster.exprs, make, rule, model, eager=False)
+                # Separate numbers and Functions, as they could be a derivative coeff
+                terms, others = split(i.args, lambda a: a.is_Add)
+                if terms:
+                    k = i.func(*terms)
+                    try:
+                        symbol, _ = extracted[k]
+                    except KeyError:
+                        symbol, _ = extracted.setdefault(k, (make(), e))
+                    mapper[i] = i.func(symbol, *others)
+
+        if mapper:
+            extracted = [e.func(v, k) for k, (v, e) in extracted.items()]
+            processed = [uxreplace(e, mapper) for e in cluster.exprs]
+            return extracted + processed, extracted
+        else:
+            return cluster.exprs, []
 
     @classmethod
     def ignore_collected(cls, group):
