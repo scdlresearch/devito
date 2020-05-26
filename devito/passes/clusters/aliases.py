@@ -193,11 +193,14 @@ class CallbacksSOPS(Callbacks):
         rule1 = lambda e: q_sum_of_product(e, depth)
         rule = lambda e: rule0(e) and rule1(e)
 
-        from IPython import embed; embed()
         def model(e):
-            if e.is_Mul:
-                return not q_sum_of_product(e, depth-1) and not any(q_leaf(a) for a in e.args)
-            return not (q_leaf(e) or q_terminalop(e, depth-1))
+            if q_sum_of_product(e, depth-1):
+                return False
+            elif e.is_Mul:
+                # E.g., 0.5*cos(a[x])*(0.2*u[x] - 0.2*u[x+1]) -> (0.2*u[x] - 0.2*u[x+1])
+                return not any(q_leaf(a) for a in e.args)
+            else:
+                return True
 
         return yreplace(cluster.exprs, make, rule, model, eager=False)
 
