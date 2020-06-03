@@ -16,7 +16,7 @@ __all__ = ['cire']
 
 
 @cluster_pass
-def cire(cluster, template, mode, options, platform):
+def cire(cluster, mode, sregistry, options, platform):
     """
     Cross-iteration redundancies elimination.
 
@@ -24,14 +24,14 @@ def cire(cluster, template, mode, options, platform):
     ----------
     cluster : Cluster
         Input Cluster, subject of the optimization pass.
-    template : callable
-        To build the symbols (temporaries) storing the redundant expressions.
     mode : str
         The transformation mode. Accepted: ['invariants', 'sops'].
         * 'invariants' is for sub-expressions that are invariant w.r.t. one or
           more Dimensions.
         * 'sops' stands for sums-of-products, that is redundancies are searched
           across all expressions in sum-of-product form.
+    sregistry : SymbolRegistry
+        To create the temporaries that will store the redundant expressions.
     options : dict
         The optimization options. Accepted: ['min-storage'].
         * 'min-storage': if True, the pass will try to minimize the amount of
@@ -117,7 +117,7 @@ def cire(cluster, template, mode, options, platform):
         extractor, model, ignore_collected, selector = callbacks_mapper[mode](context, n)
 
         # Extract potentially aliasing expressions
-        exprs, extracted = extract(cluster, extractor, model, template)
+        exprs, extracted = extract(cluster, extractor, model, sregistry)
         if not extracted:
             # Do not waste time
             continue
@@ -139,7 +139,7 @@ def cire(cluster, template, mode, options, platform):
             continue
 
         # Create Aliases and assign them to Clusters
-        clusters, subs = process(cluster, chosen, aliases, template, platform)
+        clusters, subs = process(cluster, chosen, aliases, sregistry, platform)
 
         # Rebuild `cluster` so as to use the newly created Aliases
         rebuilt = rebuild(cluster, others, aliases, subs)
@@ -154,8 +154,8 @@ def cire(cluster, template, mode, options, platform):
     return processed
 
 
-def extract(cluster, rule1, model, template):
-    make = lambda: Scalar(name=template(), dtype=cluster.dtype).indexify()
+def extract(cluster, rule1, model, sregistry):
+    make = lambda: Scalar(name=sregistry.make_name(), dtype=cluster.dtype).indexify()
 
     # Rule out symbols inducing Dimension-independent data dependences
     exclude = {i.source.indexed for i in cluster.scope.d_flow.independent()}
@@ -341,7 +341,7 @@ def choose(exprs, aliases, selector):
     return chosen, others
 
 
-def process(cluster, chosen, aliases, template, platform):
+def process(cluster, chosen, aliases, sregistry, platform):
     clusters = []
     subs = {}
     for alias, writeto, aliaseds, distances in aliases.iter(cluster.ispace):
@@ -368,7 +368,7 @@ def process(cluster, chosen, aliases, template, platform):
         sharing = 'local' if any(d.is_Incr for d in writeto.dimensions) else 'shared'
 
         # Finally create the temporary Array that will store `alias`
-        array = Array(name=template(), dimensions=dimensions, halo=halo,
+        array = Array(name=sregistry.make_name(), dimensions=dimensions, halo=halo,
                       dtype=cluster.dtype, sharing=sharing)
 
         # The access Dimensions may differ from `writeto.dimensions`. This may
