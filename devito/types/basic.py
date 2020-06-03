@@ -989,7 +989,11 @@ class Array(AbstractFunction):
     scope : str, optional
         Control memory allocation. Allowed values: 'heap', 'stack'. Defaults to 'heap'.
     sharing : str, optional
-        Control data sharing. Allowed values: 'local', 'shared'. Defaults to 'local'.
+        Control data sharing. Allowed values: 'shared', 'local'. Defaults to 'shared'.
+        'shared' means that in a multi-threaded context, the Array is shared by all
+        threads. 'local', instead, means the Array is thread-private, which causes
+        the introduction of an additional Dimension such that each thread can index
+        into a different slice of the Array.
 
     Warnings
     --------
@@ -1010,8 +1014,8 @@ class Array(AbstractFunction):
         self._scope = kwargs.get('scope', 'heap')
         assert self._scope in ['heap', 'stack']
 
-        self._sharing = kwargs.get('sharing', 'local')
-        assert self._sharing in ['local', 'shared']
+        self._sharing = kwargs.get('sharing', 'shared')
+        assert self._sharing in ['shared', 'local']
 
     def __padding_setup__(self, **kwargs):
         padding = kwargs.get('padding')
