@@ -379,7 +379,7 @@ class TestAliases(object):
 
         # Check Array shape
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 3
@@ -419,7 +419,7 @@ class TestAliases(object):
         z_size = op1.parameters[3]
 
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 2
@@ -460,7 +460,7 @@ class TestAliases(object):
         z_size = op1.parameters[4]
 
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 3
@@ -544,7 +544,7 @@ class TestAliases(object):
 
         # Check Array shape
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 3
@@ -597,7 +597,7 @@ class TestAliases(object):
         assert len(op1._func_table) == 1
 
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 2
         assert len(arrays[0].dimensions) == 2
         assert arrays[0].halo == ((1, 1), (0, 0))
@@ -654,7 +654,7 @@ class TestAliases(object):
         assert len(op1._func_table) == 1
 
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 2
         assert len(arrays[0].dimensions) == 2
         assert arrays[0].halo == ((1, 1), (1, 0))
@@ -708,7 +708,7 @@ class TestAliases(object):
         assert len(op1._func_table) == 1
 
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 2
         for a in arrays:
             assert len(a.dimensions) == 3
@@ -759,7 +759,7 @@ class TestAliases(object):
 
         # Check Array shape
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 2
         assert all(len(a.dimensions) == 2 for a in arrays)
         assert arrays[0].halo == ((1, 0), (1, 0))
@@ -809,7 +809,7 @@ class TestAliases(object):
         # Expected one single loop nest
         assert len(op1._func_table) == 1
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 2
@@ -896,7 +896,7 @@ class TestAliases(object):
         op = Operator(Eq(u.forward, u + sin(cos(g)) + sin(cos(g[x+1, y+1]))))
 
         # We expect two temporary Arrays: `r1 = cos(g)` and `r2 = sqrt(r1)`
-        arrays = [i for i in FindSymbols().visit(op) if i.is_Array]
+        arrays = [i for i in FindSymbols().visit(op) if i.is_Array and i._mem_local]
         assert len(arrays) == 2
         assert all(i._mem_heap and not i._mem_external for i in arrays)
 
@@ -975,7 +975,7 @@ class TestAliases(object):
 
         # Check Array shape
         arrays = [i for i in FindSymbols().visit(op1._func_table['bf0'].root)
-                  if i.is_Array]
+                  if i.is_Array and i._mem_local]
         assert len(arrays) == 1
         a = arrays[0]
         assert len(a.dimensions) == 3
@@ -1382,7 +1382,7 @@ class TestTTI(object):
         assert not x._defines & y._defines
 
         # Also, in this operator, we expect seven temporary Arrays:
-        # * all of the sever Arrays are allocated on the heap
+        # * all of the seven Arrays are allocated on the heap
         # * two of them appear only in the efunc and are thread-local
         arrays = [i for i in FindSymbols().visit(op) if i.is_Array]
         assert len(arrays) == 5

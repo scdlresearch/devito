@@ -94,19 +94,40 @@ class Graph(object):
             # we must update the call sites as well, as the arguments dropped down
             # to the efunc have just increased
             args = as_tuple(metadata.get('args'))
-            if args:
-                # `extif` avoids redundant updates to the parameters list, due
-                # to multiple children wanting to add the same input argument
-                extif = lambda v: list(v) + [e for e in args if e not in v]
-                stack = [i] + dag.all_downstreams(i)
-                for n in stack:
-                    efunc = self.efuncs[n]
-                    calls = [c for c in FindNodes(Call).visit(efunc) if c.name in stack]
-                    mapper = {c: c._rebuild(arguments=extif(c.arguments)) for c in calls}
-                    efunc = Transformer(mapper).visit(efunc)
-                    if efunc.is_Callable:
-                        efunc = efunc._rebuild(parameters=extif(efunc.parameters))
-                    self.efuncs[n] = efunc
+            if not args:
+                continue
+
+            def extend(v, efunc=None):
+                processed = list(v)
+                for a in args:
+                    if a in processed:
+                        # A child efunc trying to add a symbol alredy added by a
+                        # sibling efunc
+                        continue
+
+                    if efunc is self.root and not (a.is_Input or a.is_Object):
+                        # Temporaries (ie, Scalars, Arrays) *cannot* be args in `root`
+                        continue
+
+                    processed.append(a)
+
+                return processed
+
+            stack = [i] + dag.all_downstreams(i)
+            for n in stack:
+                efunc = self.efuncs[n]
+
+                mapper = {}
+                for c in FindNodes(Call).visit(efunc):
+                    if c.name not in stack:
+                        continue
+                    mapper[c] = c._rebuild(arguments=extend(c.arguments))
+
+                parameters = extend(efunc.parameters, efunc)
+                efunc = Transformer(mapper).visit(efunc)
+                efunc = efunc._rebuild(parameters=parameters)
+
+                self.efuncs[n] = efunc
 
         # Apply `func` to the external functions
         for i in range(len(self.ffuncs)):
