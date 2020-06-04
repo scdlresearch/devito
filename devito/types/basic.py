@@ -991,9 +991,7 @@ class Array(AbstractFunction):
     sharing : str, optional
         Control data sharing. Allowed values: 'shared', 'local'. Defaults to 'shared'.
         'shared' means that in a multi-threaded context, the Array is shared by all
-        threads. 'local', instead, means the Array is thread-private, which causes
-        the introduction of an additional Dimension such that each thread can index
-        into a different slice of the Array.
+        threads. 'local', instead, means the Array is thread-private.
 
     Warnings
     --------
