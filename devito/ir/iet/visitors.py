@@ -213,6 +213,16 @@ class CGen(Visitor):
                                             '(*restrict %s)%s' % (f.name, shape)))
         return c.Initializer(lvalue, rvalue)
 
+    def visit_Dereference(self, o):
+        a0, a1 = o.functions
+        projected_dims = a1.dimensions[:-a0.ndim]
+        rvalue = '%s%s' % (a1.name, ''.join('[%s]' % ccode(i) for i in projected_dims))
+        shape = ''.join("[%s]" % ccode(i) for i in a0.symbolic_shape[1:])
+        lvalue = c.AlignedAttribute(a0._data_alignment,
+                                    c.Value(a0._C_typedata,
+                                            '(*restrict %s)%s' % (a0.name, shape)))
+        return c.Initializer(lvalue, rvalue)
+
     def visit_tuple(self, o):
         return tuple(self._visit(i) for i in o)
 
@@ -578,6 +588,7 @@ class FindSymbols(Visitor):
         return filter_sorted(symbols, key=attrgetter('name'))
 
     visit_ArrayCast = visit_Expression
+    visit_Dereference = visit_Expression
 
 
 class FindNodes(Visitor):
