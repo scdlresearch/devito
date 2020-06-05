@@ -508,10 +508,10 @@ class Ompizer(object):
         iet = Transformer(mapper).visit(iet)
 
         # The new arguments introduced by this pass
-        symbols = FindSymbols().visit(iet)
-        args = [i for i in symbols if isinstance(i, (NThreadsMixin))]
-        args.extend([i for i in symbols
-                     if i.is_Array and self.sregistry.threadid in i.dimensions])
+        args = [i for i in FindSymbols().visit(iet) if isinstance(i, (NThreadsMixin))]
+        for n in FindNodes(Dereference).visit(iet):
+            args.append((n.array0, True))
+            args.append(n.array1)
 
         return iet, {'args': args, 'includes': ['omp.h']}
 

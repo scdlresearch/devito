@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from functools import partial, wraps
 
+from sympy.tensor.indexed import IndexException
+
 from devito.ir.iet import Call, FindNodes, MetaCall, Transformer
 from devito.tools import DAG, as_tuple, filter_ordered, timed_pass
 
@@ -97,9 +99,19 @@ class Graph(object):
             if not args:
                 continue
 
-            def extend(v, efunc=None):
+            def filter_args(v, efunc=None):
                 processed = list(v)
-                for a in args:
+                for _a in args:
+                    try:
+                        # Should the arg actually be dropped?
+                        a, drop = _a
+                        if drop:
+                            if a in processed:
+                                processed.remove(a)
+                            continue
+                    except (TypeError, IndexException):
+                        a = _a
+
                     if a in processed:
                         # A child efunc trying to add a symbol alredy added by a
                         # sibling efunc
@@ -121,9 +133,9 @@ class Graph(object):
                 for c in FindNodes(Call).visit(efunc):
                     if c.name not in stack:
                         continue
-                    mapper[c] = c._rebuild(arguments=extend(c.arguments))
+                    mapper[c] = c._rebuild(arguments=filter_args(c.arguments))
 
-                parameters = extend(efunc.parameters, efunc)
+                parameters = filter_args(efunc.parameters, efunc)
                 efunc = Transformer(mapper).visit(efunc)
                 efunc = efunc._rebuild(parameters=parameters)
 

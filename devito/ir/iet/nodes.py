@@ -786,7 +786,7 @@ class Dereference(ExprStmt, Node):
 
     @property
     def defines(self):
-        return ()
+        return (self.array0,)
 
 
 class LocalExpression(Expression):
