@@ -1383,16 +1383,18 @@ class TestTTI(object):
 
         # Also, in this operator, we expect seven temporary Arrays:
         # * all of the seven Arrays are allocated on the heap
-        # * two of them appear only in the efunc and are thread-local
+        # * with OpenMP, two additional thread-local arrays appear in bf0 (these
+        #   are just pointers to slices of an Array allocated globally)
         arrays = [i for i in FindSymbols().visit(op) if i.is_Array]
-        assert len(arrays) == 5
+        assert len(arrays) == 7
         assert all(i._mem_heap and not i._mem_external for i in arrays)
         arrays = [i for i in FindSymbols().visit(op._func_table['bf0'].root)
                   if i.is_Array]
-        assert len(arrays) == 7
         assert all(not i._mem_external for i in arrays)
-        assert len([i for i in arrays if i._mem_heap]) == 7
-        assert len([i for i in arrays if i._mem_shared]) == 5
+        extra_arrays = 2 if configuration['language'] == 'openmp' else 0
+        assert len(arrays) == 7 + extra_arrays
+        assert len([i for i in arrays if i._mem_heap]) == 7 + extra_arrays
+        assert len([i for i in arrays if i._mem_shared]) == 5 + extra_arrays
         assert len([i for i in arrays if i._mem_local]) == 2
 
     @skipif(['nompi'])
