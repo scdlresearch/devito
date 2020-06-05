@@ -781,8 +781,8 @@ class Dereference(ExprStmt, Node):
         This may include DiscreteFunctions as well as Dimensions.
         """
         return ((self.array0, self.array1) +
-                tuple(self.array0.symbolic_shape[1:]) +
-                tuple(self.array1.symbolic_shape[1:]))
+                tuple(flatten(i.free_symbols for i in self.array0.symbolic_shape[1:])) +
+                tuple(flatten(i.free_symbols for i in self.array1.symbolic_shape[1:])))
 
     @property
     def defines(self):
