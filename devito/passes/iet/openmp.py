@@ -81,7 +81,7 @@ class OpenMPRegion(ParallelBlock):
         self.nthreads = nthreads
 
     @classmethod
-    def _make_header(cls, nthreads, private):
+    def _make_header(cls, nthreads, private=None):
         private = ('private(%s)' % ','.join(private)) if private else ''
         return c.Pragma('omp parallel num_threads(%s) %s' % (nthreads.name, private))
 

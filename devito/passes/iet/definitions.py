@@ -4,6 +4,7 @@ of symbols and data.
 """
 
 from collections import Iterable, OrderedDict, namedtuple
+from operator import itemgetter
 
 import cgen as c
 
@@ -12,12 +13,12 @@ from devito.ir import (ArrayCast, Element, List, LocalExpression, FindSymbols,
 from devito.passes.iet.engine import iet_pass
 from devito.passes.iet.openmp import Ompizer
 from devito.symbolics import ccode
-from devito.tools import as_mapper
+from devito.tools import as_mapper, flatten
 
 __all__ = ['DataManager', 'Storage']
 
 
-MetaSite = namedtuple('Definition', 'decls allocs frees pallocs pfrees')
+MetaSite = namedtuple('Definition', 'allocs frees pallocs pfrees')
 
 
 class Storage(OrderedDict):
@@ -33,7 +34,7 @@ class Storage(OrderedDict):
         try:
             metasite = self[site]
         except KeyError:
-            metasite = self.setdefault(site, MetaSite([], [], [], [], []))
+            metasite = self.setdefault(site, MetaSite([], [], [], []))
 
         for k, v in kwargs.items():
             getattr(metasite, k).append(v)
@@ -55,7 +56,7 @@ class DataManager(object):
         """
         Allocate a LocalObject in the low latency memory.
         """
-        storage.update(obj, site, decls=c.Value(obj._C_typename, obj.name))
+        storage.update(obj, site, allocs=c.Value(obj._C_typename, obj.name))
 
     def _alloc_array_on_low_lat_mem(self, site, obj, storage):
         """
@@ -65,7 +66,7 @@ class DataManager(object):
         alignment = "__attribute__((aligned(%d)))" % obj._data_alignment
         value = "%s%s %s" % (obj.name, shape, alignment)
 
-        storage.update(obj, site, decls=c.POD(obj.dtype, value))
+        storage.update(obj, site, allocs=c.POD(obj.dtype, value))
 
     def _alloc_scalar_on_low_lat_mem(self, site, expr, storage):
         """
@@ -87,7 +88,7 @@ class DataManager(object):
 
         free = c.Statement('free(%s)' % obj.name)
 
-        storage.update(obj, site, decls=decl, allocs=alloc, frees=free)
+        storage.update(obj, site, allocs=(decl, alloc), frees=free)
 
     def _alloc_array_slice_per_thread(self, site, obj, storage):
         """
@@ -117,7 +118,7 @@ class DataManager(object):
 
         pfree = c.Statement('free(%s[%s])' % (obj.name, tid.name))
 
-        storage.update(obj, site, decls=decl, allocs=alloc, frees=free,
+        storage.update(obj, site, allocs=(decl, alloc), frees=free,
                        pallocs=(tid, palloc), pfrees=(tid, pfree))
 
     def _dump_storage(self, iet, storage):
@@ -128,39 +129,29 @@ class DataManager(object):
                 mapper[k] = v
                 continue
 
-            from IPython import embed; embed()
+            # allocs/pallocs
+            allocs = flatten(v.allocs)
+            allocs.append(c.Line())
+            for tid, body in as_mapper(v.pallocs, itemgetter(0), itemgetter(1)).items():
+                header = self._Parallelizer._Region._make_header(tid.symbolic_size)
+                # TODO: ADD tid = ...
+                allocs.append(c.Module((header, c.Block(body))))
+            if v.pallocs:
+                allocs.append(c.Line())
 
+            # frees/pfrees
+            frees = []
+            if v.pfrees:
+                frees.append(c.Line())
+            for tid, body in as_mapper(v.pfrees, itemgetter(0), itemgetter(1)).items():
+                header = self._Parallelizer._Region._make_header(tid.symbolic_size)
+                frees.append(c.Module((header, c.Block(body))))
+            if v.frees:
+                frees.append(c.Line())
+            frees.extend(flatten(v.frees))
 
-#        # Introduce symbol definitions going into the high bandwidth memory
-#        for scope, handle in storage._high_bw_mem.items():
-#            header = []
-#            footer = []
-#            for decl, alloc, free in handle.values():
-#                if decl is None:
-#                    header.append(alloc)
-#                else:
-#                    header.extend([decl, alloc])
-#                footer.append(free)
-#            if header or footer:
-#                header.append(c.Line())
-#                footer.insert(0, c.Line())
-#                body = List(header=header,
-#                            body=as_tuple(mapper.get(scope)) + scope.body,
-#                            footer=footer)
-#                mapper[scope] = scope._rebuild(body=body, **scope.args_frozen)
-#
-#        # Introduce symbol definitions for thread-shared arrays
-#        for (scope, tid), handle in storage._high_bw_mem_threaded.items():
-#            body = List(header=[alloc for alloc, _ in handle.values()])
-#            top = self._Parallelizer._Region(body, tid.symbolic_size)
-#
-#            body = List(header=[free for _, free in handle.values()])
-#           bottom = self._Parallelizer._Region(body, tid.symbolic_size)
-#
-#            a = List(body=[top, mapper.get(scope, scope), bottom])
-#            mapper[scope] = a
-#            from IPython import embed; embed()
-#
+            mapper[k] = k._rebuild(body=List(header=allocs, body=k.body, footer=frees),
+                                   **k.args_frozen)
 
         processed = Transformer(mapper, nested=True).visit(iet)
 
