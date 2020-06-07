@@ -12,29 +12,40 @@ from devito.ir import (ArrayCast, Element, List, LocalExpression, FindSymbols,
 from devito.passes.iet.engine import iet_pass
 from devito.passes.iet.openmp import Ompizer
 from devito.symbolics import ccode
-from devito.tools import as_tuple
+from devito.tools import as_mapper
 
 __all__ = ['DataManager', 'Storage']
 
 
-Definition = namedtuple('Definition', 'decl alloc free region')
-Definition.__new__.__defaults__ = (None,) * len(Definition._fields)
-
-class DefinitionMapper(OrderedDict):
-
-    def __setitem__(self, k, v):
-        if not v or isinstance(v, Definition):
-            v = [v]
-        elif not isinstance(v, Iterable):
-            raise ValueError
-        super(DefinitionMapper, self).__setitem__(k, v)
+MetaSite = namedtuple('Definition', 'decls allocs frees pallocs pfrees')
 
 
 class Storage(OrderedDict):
 
-    def make_site(self, site):
-        return self.setdefault(site, DefinitionMapper())
+    def __init__(self, *args, **kwargs):
+        super(Storage, self).__init__(*args, **kwargs)
+        self.defined = set()
 
+    def update(self, obj, site, **kwargs):
+        if obj in self.defined:
+            return
+
+        try:
+            metasite = self[site]
+        except KeyError:
+            metasite = self.setdefault(site, MetaSite([], [], [], [], []))
+
+        for k, v in kwargs.items():
+            getattr(metasite, k).append(v)
+
+        self.defined.add(obj)
+
+    def map(self, obj, k, v):
+        if obj in self.defined:
+            return
+
+        self[k] = v
+        self.defined.add(obj)
 
 class DataManager(object):
 
@@ -44,45 +55,28 @@ class DataManager(object):
         """
         Allocate a LocalObject in the low latency memory.
         """
-        mapper = storage.make_site(site)
-
-        mapper[obj] = Definition(c.Value(obj._C_typename, obj.name))
+        storage.update(obj, site, decls=c.Value(obj._C_typename, obj.name))
 
     def _alloc_array_on_low_lat_mem(self, site, obj, storage):
         """
         Allocate an Array in the low latency memory.
         """
-        mapper = storage.make_site(site)
-
-        if obj in mapper:
-            return
-
         shape = "".join("[%s]" % ccode(i) for i in obj.symbolic_shape)
         alignment = "__attribute__((aligned(%d)))" % obj._data_alignment
         value = "%s%s %s" % (obj.name, shape, alignment)
 
-        mapper[obj] = Definition(c.POD(obj.dtype, value))
+        storage.update(obj, site, decls=c.POD(obj.dtype, value))
 
     def _alloc_scalar_on_low_lat_mem(self, site, expr, storage):
         """
         Allocate a Scalar in the low latency memory.
         """
-        obj = expr.write
-        mapper = storage.make_site(site)
-
-        if obj in mapper:
-            return
-
-        mapper[obj] = None  # Placeholder to avoid reallocation
-        mapper[expr] = Definition(LocalExpression(**expr.args))
+        storage.map(expr.write, expr, LocalExpression(**expr.args))
 
     def _alloc_array_on_high_bw_mem(self, site, obj, storage):
-        """Allocate an Array in the high bandwidth memory."""
-        mapper = storage.make_site(site)
-
-        if obj in mapper:
-            return
-
+        """
+        Allocate an Array in the high bandwidth memory.
+        """
         decl = "(*%s)%s" % (obj.name, "".join("[%s]" % i for i in obj.symbolic_shape[1:]))
         decl = c.Value(obj._C_typedata, decl)
 
@@ -93,18 +87,13 @@ class DataManager(object):
 
         free = c.Statement('free(%s)' % obj.name)
 
-        mapper[obj] = Definition(decl, alloc, free)
+        storage.update(obj, site, decls=decl, allocs=alloc, frees=free)
 
     def _alloc_array_slice_per_thread(self, site, obj, storage):
         """
         For an Array whose outermost is a ThreadDimension, allocate each of its slices
         in the high bandwidth memory.
         """
-        mapper = storage.make_site(site)
-
-        if obj in mapper:
-            return
-
         # Construct the definition for a pointer array that is `nthreads` long
         tid = obj.dimensions[0]
         assert tid.is_Thread
@@ -119,37 +108,28 @@ class DataManager(object):
 
         free = c.Statement('free(%s)' % obj.name)
 
-        mapper[obj] = [Definition(decl, alloc, free)]
-
         # Construct parallel pointer allocation
         shape = "".join("[%s]" % i for i in obj.symbolic_shape[1:])
-        alloc = "posix_memalign((void**)&%s[%s], %d, sizeof(%s%s))"
-        alloc = alloc % (obj.name, tid.name, obj._data_alignment, obj._C_typedata, shape)
-        alloc = c.Statement(alloc)
+        palloc = "posix_memalign((void**)&%s[%s], %d, sizeof(%s%s))"
+        palloc = palloc % (obj.name, tid.name, obj._data_alignment, obj._C_typedata,
+                           shape)
+        palloc = c.Statement(palloc)
 
-        free = c.Statement('free(%s[%s])' % (obj.name, tid.name))
+        pfree = c.Statement('free(%s[%s])' % (obj.name, tid.name))
 
-        mapper[obj].append(Definition(None, alloc, free, tid))
+        storage.update(obj, site, decls=decl, allocs=alloc, frees=free,
+                       pallocs=(tid, palloc), pfrees=(tid, pfree))
 
     def _dump_storage(self, iet, storage):
-        subs = {}
-        site_mapper = {}
-        for site, mapper in storage.items():
-            for obj, definitions in mapper.items():
-                for definition in as_tuple(definitions):
-                    if not definition:
-                        continue
+        mapper = {}
+        for k, v in storage.items():
+            # Expr -> LocalExpr ?
+            if k.is_Expression:
+                mapper[k] = v
+                continue
 
-                    try:
-                        if obj.is_Expression:
-                            # Expr -> LocalExpr
-                            subs[obj] = definition.decl
-                            continue
-                    except AttributeError:
-                        pass
+            from IPython import embed; embed()
 
-                    site_mapper[site]
-                    from IPython import embed; embed()
 
 #        # Introduce symbol definitions going into the high bandwidth memory
 #        for scope, handle in storage._high_bw_mem.items():
@@ -182,7 +162,7 @@ class DataManager(object):
 #            from IPython import embed; embed()
 #
 
-        processed = Transformer(subs, nested=True).visit(iet)
+        processed = Transformer(mapper, nested=True).visit(iet)
 
         return processed
 
