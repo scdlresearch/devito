@@ -95,16 +95,16 @@ class DataManager(object):
         For an Array whose outermost is a ThreadDimension, allocate each of its slices
         in the high bandwidth memory.
         """
-        # Construct the definition for a pointer array that is `nthreads` long
+        # Construct the definition for an nthreads-long array of pointers
         tid = obj.dimensions[0]
         assert tid.is_Thread
 
-        decl = "(*%s)%s" % (obj.name, "".join("[%s]" % i for i in obj.symbolic_shape[1:]))
+        decl = "**%s" % obj.name
         decl = c.Value(obj._C_typedata, decl)
 
-        shape = "[%s]" % tid.symbolic_size
-        alloc = "posix_memalign((void**)&%s, %d, sizeof(%s%s))"
-        alloc = alloc % (obj.name, obj._data_alignment, obj._C_typedata, shape)
+        alloc = "posix_memalign((void**)&%s, %d, sizeof(%s*)*%s)"
+        alloc = alloc % (obj.name, obj._data_alignment, obj._C_typedata,
+                         tid.symbolic_size)
         alloc = c.Statement(alloc)
 
         free = c.Statement('free(%s)' % obj.name)
