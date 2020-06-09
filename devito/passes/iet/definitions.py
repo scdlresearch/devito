@@ -90,36 +90,41 @@ class DataManager(object):
 
         storage.update(obj, site, allocs=(decl, alloc), frees=free)
 
-    def _alloc_array_slice_per_thread(self, site, obj, storage):
+    def _alloc_pointed_array_on_high_bw_mem(self, site, obj, storage):
         """
-        For an Array whose outermost is a ThreadDimension, allocate each of its slices
-        in the high bandwidth memory.
-        """
-        # Construct the definition for an nthreads-long array of pointers
-        tid = obj.dimensions[0]
-        assert tid.is_Thread
+        Allocate the following objects in the high bandwidth memory:
 
+            * The pointer array `obj`;
+            * The pointee Array `obj.array`
+
+        If the pointer array is defined over a ThreadDimension, then each `obj.array`
+        slice is allocated and freed individually by the logically-owning thread.
+        """
+        # The pointer array
         decl = "**%s" % obj.name
         decl = c.Value(obj._C_typedata, decl)
 
-        alloc = "posix_memalign((void**)&%s, %d, sizeof(%s*)*%s)"
-        alloc = alloc % (obj.name, obj._data_alignment, obj._C_typedata,
-                         tid.symbolic_size)
-        alloc = c.Statement(alloc)
+        alloc0 = "posix_memalign((void**)&%s, %d, sizeof(%s*)*%s)"
+        alloc0 = alloc0 % (obj.name, obj._data_alignment, obj._C_typedata,
+                           obj.dim.symbolic_size)
+        alloc0 = c.Statement(alloc0)
 
-        free = c.Statement('free(%s)' % obj.name)
+        free0 = c.Statement('free(%s)' % obj.name)
 
-        # Construct parallel pointer allocation
+        # The pointee Array
         shape = "".join("[%s]" % i for i in obj.symbolic_shape[1:])
-        palloc = "posix_memalign((void**)&%s[%s], %d, sizeof(%s%s))"
-        palloc = palloc % (obj.name, tid.name, obj._data_alignment, obj._C_typedata,
+        alloc1 = "posix_memalign((void**)&%s[%s], %d, sizeof(%s%s))"
+        alloc1 = alloc1 % (obj.name, obj.dim.name, obj._data_alignment, obj._C_typedata,
                            shape)
-        palloc = c.Statement(palloc)
+        alloc1 = c.Statement(alloc1)
 
-        pfree = c.Statement('free(%s[%s])' % (obj.name, tid.name))
+        free1 = c.Statement('free(%s[%s])' % (obj.name, obj.dim.name))
 
-        storage.update(obj, site, allocs=(decl, alloc), frees=free,
-                       pallocs=(tid, palloc), pfrees=(tid, pfree))
+        if obj.dim.is_Thread:
+            storage.update(obj, site, allocs=(decl, alloc0), frees=free0,
+                           pallocs=(obj.dim, alloc1), pfrees=(obj.dim, free1))
+        else:
+            storage.update(obj, site, allocs=(decl, alloc0, alloc1), frees=(free0, free1))
 
     def _dump_storage(self, iet, storage):
         mapper = {}
@@ -180,8 +185,8 @@ class DataManager(object):
                     continue
                 objs = [k.write]
             elif k.is_Dereference:
-                already_defined.append(k.array0)
-                objs = [k.array1]
+                already_defined.extend(list(k.functions))
+                objs = []
             elif k.is_Call:
                 objs = k.arguments
 
@@ -203,20 +208,12 @@ class DataManager(object):
                                 if n.is_ParallelBlock:
                                     site = n
                                     break
-                            if i._mem_heap:
-                                self._alloc_array_on_high_bw_mem(site, i, storage)
-                            else:
-                                self._alloc_array_on_low_lat_mem(site, i, storage)
+                        if i._mem_heap:
+                            self._alloc_array_on_high_bw_mem(site, i, storage)
                         else:
-                            if i._mem_heap:
-                                if i.dimensions[0].is_Thread:
-                                    # Optimization: each thread allocates its own
-                                    # logically private slice
-                                    self._alloc_array_slice_per_thread(site, i, storage)
-                                else:
-                                    self._alloc_array_on_high_bw_mem(site, i, storage)
-                            else:
-                                self._alloc_array_on_low_lat_mem(site, i, storage)
+                            self._alloc_array_on_low_lat_mem(site, i, storage)
+                    elif i.is_PointerArray:
+                        self._alloc_pointed_array_on_high_bw_mem(iet, i, storage)
                 except AttributeError:
                     # E.g., a generic SymPy expression
                     pass

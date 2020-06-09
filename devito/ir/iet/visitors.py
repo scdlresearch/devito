@@ -213,10 +213,8 @@ class CGen(Visitor):
 
     def visit_Dereference(self, o):
         a0, a1 = o.functions
-        projected_dims = a1.dimensions[:-a0.ndim]
         shape = ''.join("[%s]" % ccode(i) for i in a0.symbolic_shape[1:])
-        rvalue = '(%s (*)%s) %s%s' % (a1._C_typedata, shape, a1.name,
-                                      ''.join('[%s]' % ccode(i) for i in projected_dims))
+        rvalue = '(%s (*)%s) %s[%s]' % (a1._C_typedata, shape, a1.name, a1.dim.name)
         lvalue = c.AlignedAttribute(a0._data_alignment,
                                     c.Value(a0._C_typedata,
                                             '(*restrict %s)%s' % (a0.name, shape)))
