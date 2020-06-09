@@ -21,10 +21,6 @@ class ArrayBasic(AbstractFunction):
         return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
 
     @property
-    def _C_typename(self):
-        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
-
-    @property
     def shape(self):
         return self.symbolic_shape
 
@@ -116,6 +112,10 @@ class Array(ArrayBasic):
         return kwargs.get('dtype', np.float32)
 
     @property
+    def _C_typename(self):
+        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
+
+    @property
     def scope(self):
         return self._scope
 
@@ -182,6 +182,10 @@ class PointerArray(ArrayBasic):
     @classmethod
     def __dtype_setup__(cls, **kwargs):
         return kwargs['array'].dtype
+
+    @property
+    def _C_typename(self):
+        return ctypes_to_cstr(POINTER(POINTER(dtype_to_ctype(self.dtype))))
 
     @property
     def dim(self):
