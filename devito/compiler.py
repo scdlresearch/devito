@@ -538,13 +538,14 @@ class CustomCompiler(Compiler):
     or otherwise default to ``-fopenmp``.
     """
 
-    def __new__(cls, *args, **kwargs):
-        if any(i in environ for i in ['CC', 'CXX', 'CFLAGS', 'LDFLAGS']):
-            obj = super().__new__(cls, *args, **kwargs)
-            obj.__init__(*args, **kwargs)
-            return obj
-        else:
-            return GNUCompiler(*args, **kwargs)
+    #def __new__(cls, *args, **kwargs):
+        #if any(i in environ for i in ['CC', 'CXX', 'CFLAGS', 'LDFLAGS']):
+            #obj = super().__new__(cls, *args, **kwargs)
+            #obj.__init__(*args, **kwargs)
+            #return obj
+        #else:
+            #return GNUCompiler(*args, **kwargs)
+        #return GNUCompiler(*args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         super(CustomCompiler, self).__init__(*args, **kwargs)
