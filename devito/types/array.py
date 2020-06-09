@@ -5,13 +5,14 @@ import numpy as np
 from cached_property import cached_property
 
 from devito.parameters import configuration
-from devito.tools import ctypes_to_cstr, dtype_to_ctype
+from devito.tools import as_tuple, ctypes_to_cstr, dtype_to_ctype
 from devito.types.basic import AbstractFunction
 
-__all__ = ['Array']
+__all__ = ['Array', 'PointerArray']
 
 
 class Array(AbstractFunction):
+
     """
     Tensor symbol representing an array in symbolic equations.
 
@@ -139,3 +140,65 @@ class Array(AbstractFunction):
 
     # Pickling support
     _pickle_kwargs = AbstractFunction._pickle_kwargs + ['dimensions', 'scope', 'sharing']
+
+
+class PointerArray(AbstractFunction):
+
+    """
+    Symbol representing a pointer to an Array.
+
+    Parameters
+    ----------
+    name : str
+        Name of the symbol.
+    dimensions : Dimension
+        The pointer Dimension.
+    array : Array
+        The pointed Array.
+
+    Warnings
+    --------
+    PointerArrays are created and managed directly by Devito (IOW, they are not
+    expected to be used directly in user code).
+    """
+
+    is_PointerArray = True
+    is_Tensor = True
+
+    def __new__(cls, *args, **kwargs):
+        kwargs.update({'options': {'evaluate': False}})
+        return AbstractFunction.__new__(cls, *args, **kwargs)
+
+    def __init_finalize__(self, *args, **kwargs):
+        super(PointerArray, self).__init_finalize__(*args, **kwargs)
+
+        self._array = kwargs['array']
+        assert self._array.is_Array
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+
+    @classmethod
+    def __dtype_setup__(cls, **kwargs):
+        return kwargs['array'].dtype
+
+    @property
+    def dim(self):
+        """Shortcut for self.dimensions[0]."""
+        return self.dimensions[0]
+
+    @property
+    def array(self):
+        return self._array
+
+    @property
+    def shape(self):
+        return self.symbolic_shape
+
+    @property
+    def _C_typename(self):
+        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
+
+    # Pickling support
+    _pickle_kwargs = ['name', 'dimensions', 'array']
