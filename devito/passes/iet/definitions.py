@@ -3,12 +3,12 @@ Collection of passes for the declaration, allocation, movement and deallocation
 of symbols and data.
 """
 
-from collections import Iterable, OrderedDict, namedtuple
+from collections import OrderedDict, namedtuple
 from operator import itemgetter
 
 import cgen as c
 
-from devito.ir import (ArrayCast, Element, List, LocalExpression, FindSymbols,
+from devito.ir import (ArrayCast, List, LocalExpression, FindSymbols,
                        MapExprStmts, Transformer)
 from devito.passes.iet.engine import iet_pass
 from devito.passes.iet.openmp import Ompizer
@@ -134,8 +134,8 @@ class DataManager(object):
             allocs.append(c.Line())
             for tid, body in as_mapper(v.pallocs, itemgetter(0), itemgetter(1)).items():
                 header = self._Parallelizer._Region._make_header(tid.symbolic_size)
-                # TODO: ADD tid = ...
-                allocs.append(c.Module((header, c.Block(body))))
+                init = self._Parallelizer._make_tid(tid)
+                allocs.append(c.Module((header, c.Block([init] + body))))
             if v.pallocs:
                 allocs.append(c.Line())
 
@@ -145,7 +145,8 @@ class DataManager(object):
                 frees.append(c.Line())
             for tid, body in as_mapper(v.pfrees, itemgetter(0), itemgetter(1)).items():
                 header = self._Parallelizer._Region._make_header(tid.symbolic_size)
-                frees.append(c.Module((header, c.Block(body))))
+                init = self._Parallelizer._make_tid(tid)
+                frees.append(c.Module((header, c.Block([init] + body))))
             if v.frees:
                 frees.append(c.Line())
             frees.extend(flatten(v.frees))
