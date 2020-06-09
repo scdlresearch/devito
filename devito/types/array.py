@@ -11,7 +11,25 @@ from devito.types.basic import AbstractFunction
 __all__ = ['Array', 'PointerArray']
 
 
-class Array(AbstractFunction):
+class ArrayBasic(AbstractFunction):
+
+    is_ArrayBasic = True
+    is_Tensor = True
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+
+    @property
+    def _C_typename(self):
+        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
+
+    @property
+    def shape(self):
+        return self.symbolic_shape
+
+
+class Array(ArrayBasic):
 
     """
     Tensor symbol representing an array in symbolic equations.
@@ -46,7 +64,6 @@ class Array(AbstractFunction):
     """
 
     is_Array = True
-    is_Tensor = True
 
     def __new__(cls, *args, **kwargs):
         kwargs.update({'options': {'evaluate': False}})
@@ -95,16 +112,8 @@ class Array(AbstractFunction):
             raise TypeError("`padding` must be int or %d-tuple of ints" % self.ndim)
 
     @classmethod
-    def __indices_setup__(cls, **kwargs):
-        return tuple(kwargs['dimensions']), tuple(kwargs['dimensions'])
-
-    @classmethod
     def __dtype_setup__(cls, **kwargs):
         return kwargs.get('dtype', np.float32)
-
-    @property
-    def shape(self):
-        return self.symbolic_shape
 
     @property
     def scope(self):
@@ -130,10 +139,6 @@ class Array(AbstractFunction):
     def _mem_shared(self):
         return self._sharing == 'shared'
 
-    @property
-    def _C_typename(self):
-        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
-
     @cached_property
     def free_symbols(self):
         return super().free_symbols - {d for d in self.dimensions if d.is_Default}
@@ -142,7 +147,7 @@ class Array(AbstractFunction):
     _pickle_kwargs = AbstractFunction._pickle_kwargs + ['dimensions', 'scope', 'sharing']
 
 
-class PointerArray(AbstractFunction):
+class PointerArray(ArrayBasic):
 
     """
     Symbol representing a pointer to an Array.
@@ -163,7 +168,6 @@ class PointerArray(AbstractFunction):
     """
 
     is_PointerArray = True
-    is_Tensor = True
 
     def __new__(cls, *args, **kwargs):
         kwargs.update({'options': {'evaluate': False}})
@@ -174,10 +178,6 @@ class PointerArray(AbstractFunction):
 
         self._array = kwargs['array']
         assert self._array.is_Array
-
-    @classmethod
-    def __indices_setup__(cls, **kwargs):
-        return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -191,14 +191,6 @@ class PointerArray(AbstractFunction):
     @property
     def array(self):
         return self._array
-
-    @property
-    def shape(self):
-        return self.symbolic_shape
-
-    @property
-    def _C_typename(self):
-        return ctypes_to_cstr(POINTER(dtype_to_ctype(self.dtype)))
 
     # Pickling support
     _pickle_kwargs = ['name', 'dimensions', 'array']
