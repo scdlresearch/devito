@@ -49,15 +49,15 @@ class TestCodeGeneration(object):
         assert trees[0][1].pragmas[0].value ==\
             'omp target teams distribute parallel for collapse(3)'
         for i, f in enumerate([u, v]):
-            assert op.body[2].header[i].value ==\
+            assert op.body[1].header[i].value ==\
                 ('omp target enter data map(to: %(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
-            assert op.body[2].footer[i+1].contents[0].value ==\
+            assert op.body[1].footer[i+1].contents[0].value ==\
                 ('omp target update from(%(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
-            assert op.body[2].footer[i+1].contents[1].value ==\
+            assert op.body[1].footer[i+1].contents[1].value ==\
                 ('omp target exit data map(release: %(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
@@ -90,36 +90,36 @@ class TestCodeGeneration(object):
 
         # Check `u` and `v`
         for i, f in enumerate([u, v], 1):
-            assert op.body[4].header[i].value ==\
+            assert op.body[1].header[i].value ==\
                 ('omp target enter data map(to: %(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
-            assert op.body[4].footer[i+1].contents[0].value ==\
+            assert op.body[1].footer[i+1].contents[0].value ==\
                 ('omp target update from(%(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
-            assert op.body[4].footer[i+1].contents[1].value ==\
+            assert op.body[1].footer[i+1].contents[1].value ==\
                 ('omp target exit data map(release: %(n)s[0:%(n)s_vec->size[0]]'
                  '[0:%(n)s_vec->size[1]][0:%(n)s_vec->size[2]][0:%(n)s_vec->size[3]])' %
                  {'n': f.name})
 
         # Check `f`
-        assert op.body[4].header[0].value ==\
+        assert op.body[1].header[0].value ==\
             ('omp target enter data map(to: f[0:f_vec->size[0]]'
              '[0:f_vec->size[1]][0:f_vec->size[2]])')
-        assert op.body[4].footer[1].contents[0].value ==\
+        assert op.body[1].footer[1].contents[0].value ==\
             ('omp target update from(f[0:f_vec->size[0]]'
              '[0:f_vec->size[1]][0:f_vec->size[2]])')
-        assert op.body[4].footer[1].contents[1].value ==\
+        assert op.body[1].footer[1].contents[1].value ==\
             ('omp target exit data map(release: f[0:f_vec->size[0]]'
              '[0:f_vec->size[1]][0:f_vec->size[2]])')
 
         # Check `g` -- note that unlike `f`, this one should be `delete` upon
         # exit, not `from`
-        assert op.body[4].header[3].value ==\
+        assert op.body[1].header[3].value ==\
             ('omp target enter data map(to: g[0:g_vec->size[0]]'
              '[0:g_vec->size[1]][0:g_vec->size[2]])')
-        assert op.body[4].footer[4].value ==\
+        assert op.body[1].footer[4].value ==\
             ('omp target exit data map(delete: g[0:g_vec->size[0]]'
              '[0:g_vec->size[1]][0:g_vec->size[2]])')
 
@@ -160,17 +160,17 @@ class TestCodeGeneration(object):
 
         op = Operator(eqns, opt='noop')
 
-        assert len(op.body[2].header) == 2
-        assert len(op.body[2].footer) == 2
-        assert op.body[2].header[0].value ==\
+        assert len(op.body[1].header) == 2
+        assert len(op.body[1].footer) == 2
+        assert op.body[1].header[0].value ==\
             ('omp target enter data map(to: u[0:u_vec->size[0]]'
              '[0:u_vec->size[1]][0:u_vec->size[2]][0:u_vec->size[3]])')
-        assert str(op.body[2].header[1]) == ''
-        assert str(op.body[2].footer[0]) == ''
-        assert op.body[2].footer[1].contents[0].value ==\
+        assert str(op.body[1].header[1]) == ''
+        assert str(op.body[1].footer[0]) == ''
+        assert op.body[1].footer[1].contents[0].value ==\
             ('omp target update from(u[0:u_vec->size[0]]'
              '[0:u_vec->size[1]][0:u_vec->size[2]][0:u_vec->size[3]])')
-        assert op.body[2].footer[1].contents[1].value ==\
+        assert op.body[1].footer[1].contents[1].value ==\
             ('omp target exit data map(release: u[0:u_vec->size[0]]'
              '[0:u_vec->size[1]][0:u_vec->size[2]][0:u_vec->size[3]])')
 
