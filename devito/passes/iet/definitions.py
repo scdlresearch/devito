@@ -190,14 +190,14 @@ class DataManager(object):
                 objs = k.arguments
 
             for i in objs:
+                if i in already_defined:
+                    continue
+
                 try:
                     if i.is_LocalObject:
                         site = v[-1] if v else iet
                         self._alloc_object_on_low_lat_mem(site, i, storage)
                     elif i.is_Array:
-                        if i in already_defined:
-                            # The Array is passed as a Callable argument
-                            continue
                         site = iet
                         if i._mem_local:
                             # If inside a ParallelRegion, make sure we allocate
