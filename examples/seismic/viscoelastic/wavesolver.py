@@ -29,7 +29,7 @@ class ViscoelasticWaveSolver(object):
         self.geometry = geometry
 
         self.space_order = space_order
-        self.dt = self.model.critical_dt
+        self.dt = self.model.critical_dt/10
         # Cache compiler options
         self._kwargs = kwargs
 

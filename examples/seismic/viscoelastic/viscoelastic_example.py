@@ -51,7 +51,7 @@ if __name__ == "__main__":
     ndim = args.ndim
     shape = args.shape[:args.ndim]
     spacing = tuple(ndim * [10.0])
-    tn = 750. if ndim < 3 else 1250.
+    tn = 750. if ndim < 3 else 3000.
 
     run(shape=shape, spacing=spacing, nbl=args.nbl, tn=tn, opt=args.opt,
         space_order=args.space_order, autotune=args.autotune, constant=args.constant)
