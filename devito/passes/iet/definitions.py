@@ -48,6 +48,7 @@ class Storage(OrderedDict):
         self[k] = v
         self.defined.add(obj)
 
+
 class DataManager(object):
 
     _Parallelizer = Ompizer
@@ -72,7 +73,7 @@ class DataManager(object):
         """
         Allocate a Scalar in the low latency memory.
         """
-        storage.map(expr.write, expr, LocalExpression(**expr.args))
+        storage.map((site, expr.write), expr, LocalExpression(**expr.args))
 
     def _alloc_array_on_high_bw_mem(self, site, obj, storage):
         """
