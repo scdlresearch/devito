@@ -143,13 +143,13 @@ class DeviceOpenMPDataManager(DataManager):
     _Parallelizer = DeviceOmpizer
 
     def _alloc_array_on_high_bw_mem(self, site, obj, storage):
-        super()._alloc_array_on_high_bw_mem(site, obj, storage)
-
         alloc = self._Parallelizer._map_alloc(obj)
         free = self._Parallelizer._map_delete(obj)
 
         key = (obj, 'gpu-alloc')
         storage.update(key, site, allocs=alloc, frees=free)
+
+        super()._alloc_array_on_high_bw_mem(site, obj, storage)
 
     def _map_function_on_high_bw_mem(self, site, obj, storage, read_only=False):
         """
