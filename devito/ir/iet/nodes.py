@@ -723,7 +723,7 @@ class PointerCast(Node):
         """
         The shape used in the left-hand side and right-hand side of the PointerCast.
         """
-        if self.function.is_Array:
+        if self.function.is_ArrayBasic:
             return self.function.symbolic_shape[1:]
         else:
             return tuple(self.function._C_get_field(FULL, d).size
@@ -740,7 +740,7 @@ class PointerCast(Node):
 
         This may include DiscreteFunctions as well as Dimensions.
         """
-        if self.function.is_Array:
+        if self.function.is_ArrayBasic:
             sizes = flatten(s.free_symbols for s in self.function.symbolic_shape[1:])
             return (self.function, ) + as_tuple(sizes)
         else:

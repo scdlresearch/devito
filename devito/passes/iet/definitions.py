@@ -112,7 +112,7 @@ class DataManager(object):
         free0 = c.Statement('free(%s)' % obj.name)
 
         # The pointee Array
-        shape = "".join("[%s]" % i for i in obj.symbolic_shape[1:])
+        shape = "".join("[%s]" % i for i in obj.array.symbolic_shape)
         alloc1 = "posix_memalign((void**)&%s[%s], %d, sizeof(%s%s))"
         alloc1 = alloc1 % (obj.name, obj.dim.name, obj._data_alignment, obj._C_typedata,
                            shape)
@@ -199,7 +199,6 @@ class DataManager(object):
                         if i in already_defined:
                             # The Array is passed as a Callable argument
                             continue
-
                         site = iet
                         if i._mem_local:
                             # If inside a ParallelRegion, make sure we allocate
@@ -237,7 +236,7 @@ class DataManager(object):
 
         # Make the generated code less verbose by avoiding unnecessary casts
         indexed_names = {i.name for i in FindSymbols('indexeds').visit(iet)}
-        need_cast = {i for i in need_cast if i.name in indexed_names or i.is_Array}
+        need_cast = {i for i in need_cast if i.name in indexed_names or i.is_ArrayBasic}
 
         casts = tuple(PointerCast(i) for i in iet.parameters if i in need_cast)
         iet = iet._rebuild(body=casts + iet.body)

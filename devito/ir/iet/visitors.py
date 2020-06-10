@@ -190,7 +190,7 @@ class CGen(Visitor):
                     ret.append(self.visit(i).text)
                 elif i.is_LocalObject:
                     ret.append('&%s' % i._C_name)
-                elif i.is_Array or i.is_PointerArray:
+                elif i.is_ArrayBasic:
                     ret.append("(%s)%s" % (i._C_typename, i.name))
                 else:
                     ret.append(i._C_name)
@@ -200,15 +200,19 @@ class CGen(Visitor):
 
     def visit_PointerCast(self, o):
         f = o.function
-        shape = ''.join("[%s]" % ccode(i) for i in o.castshape)
-        if f.is_DiscreteFunction:
-            rvalue = '(%s (*)%s) %s->%s' % (f._C_typedata, shape, f._C_name,
-                                            f._C_field_data)
+        if f.is_PointerArray:
+            rvalue = '(%s**) %s' % (f._C_typedata, f._C_name)
+            lvalue = c.Value(f._C_typedata, '**%s' % f.name)
         else:
-            rvalue = '(%s (*)%s) %s' % (f._C_typedata, shape, f._C_name)
-        lvalue = c.AlignedAttribute(f._data_alignment,
-                                    c.Value(f._C_typedata,
-                                            '(*restrict %s)%s' % (f.name, shape)))
+            shape = ''.join("[%s]" % ccode(i) for i in o.castshape)
+            if f.is_DiscreteFunction:
+                rvalue = '(%s (*)%s) %s->%s' % (f._C_typedata, shape, f._C_name,
+                                                f._C_field_data)
+            else:
+                rvalue = '(%s (*)%s) %s' % (f._C_typedata, shape, f._C_name)
+            lvalue = c.AlignedAttribute(f._data_alignment,
+                                        c.Value(f._C_typedata,
+                                                '(*restrict %s)%s' % (f.name, shape)))
         return c.Initializer(lvalue, rvalue)
 
     def visit_Dereference(self, o):
