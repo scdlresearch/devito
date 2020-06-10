@@ -138,25 +138,22 @@ class DataManager(object):
 
             # allocs/pallocs
             allocs = flatten(v.allocs)
-            allocs.append(c.Line())
             for tid, body in as_mapper(v.pallocs, itemgetter(0), itemgetter(1)).items():
                 header = self._Parallelizer._Region._make_header(tid.symbolic_size)
                 init = self._Parallelizer._make_tid(tid)
                 allocs.append(c.Module((header, c.Block([init] + body))))
-            if v.pallocs:
+            if allocs:
                 allocs.append(c.Line())
 
             # frees/pfrees
             frees = []
-            if v.pfrees:
-                frees.append(c.Line())
             for tid, body in as_mapper(v.pfrees, itemgetter(0), itemgetter(1)).items():
                 header = self._Parallelizer._Region._make_header(tid.symbolic_size)
                 init = self._Parallelizer._make_tid(tid)
                 frees.append(c.Module((header, c.Block([init] + body))))
-            if v.frees:
-                frees.append(c.Line())
             frees.extend(flatten(v.frees))
+            if frees:
+                frees.insert(0, c.Line())
 
             mapper[k] = k._rebuild(body=List(header=allocs, body=k.body, footer=frees),
                                    **k.args_frozen)
@@ -241,6 +238,9 @@ class DataManager(object):
         need_cast = {i for i in need_cast if i.name in indexed_names or i.is_ArrayBasic}
 
         casts = tuple(PointerCast(i) for i in iet.parameters if i in need_cast)
+        if casts:
+            casts = (List(body=casts, footer=c.Line()),)
+
         iet = iet._rebuild(body=casts + iet.body)
 
         return iet, {}
