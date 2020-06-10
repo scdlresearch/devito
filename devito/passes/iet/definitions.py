@@ -27,8 +27,8 @@ class Storage(OrderedDict):
         super(Storage, self).__init__(*args, **kwargs)
         self.defined = set()
 
-    def update(self, obj, site, **kwargs):
-        if obj in self.defined:
+    def update(self, key, site, **kwargs):
+        if key in self.defined:
             return
 
         try:
@@ -39,14 +39,14 @@ class Storage(OrderedDict):
         for k, v in kwargs.items():
             getattr(metasite, k).append(v)
 
-        self.defined.add(obj)
+        self.defined.add(key)
 
-    def map(self, obj, k, v):
-        if obj in self.defined:
+    def map(self, key, k, v):
+        if key in self.defined:
             return
 
         self[k] = v
-        self.defined.add(obj)
+        self.defined.add(key)
 
 
 class DataManager(object):
@@ -73,7 +73,8 @@ class DataManager(object):
         """
         Allocate a Scalar in the low latency memory.
         """
-        storage.map((site, expr.write), expr, LocalExpression(**expr.args))
+        key = (site, expr.write)  # Ensure a scalar isn't redeclared in the given site
+        storage.map(key, expr, LocalExpression(**expr.args))
 
     def _alloc_array_on_high_bw_mem(self, site, obj, storage):
         """
