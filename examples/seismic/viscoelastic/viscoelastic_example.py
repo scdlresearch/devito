@@ -1,5 +1,6 @@
 import numpy as np
 
+from devito import norm
 from devito.logger import info
 from examples.seismic.viscoelastic import ViscoelasticWaveSolver
 from examples.seismic import demo_model, setup_geometry, seismic_args
@@ -29,13 +30,15 @@ def run(shape=(50, 50), spacing=(20.0, 20.0), tn=1000.0,
     # Define receiver geometry (spread across x, just below surface)
     rec1, rec2, v, tau, summary = solver.forward(autotune=autotune)
 
+    print("rec1: ", norm(rec1))
+    print("rec2: ", norm(rec2))
+    print("v[0]: ", norm(v[0]))
     return (summary.gflopss, summary.oi, summary.timings,
             [rec1, rec2, v, tau])
 
 
 def test_viscoelastic():
     _, _, _, [rec1, rec2, v, tau] = run()
-    norm = lambda x: np.linalg.norm(x.data.reshape(-1))
     assert np.isclose(norm(rec1), 12.5694, atol=1e-3, rtol=0)
     assert np.isclose(norm(rec2), 0.29526, atol=1e-3, rtol=0)
 
