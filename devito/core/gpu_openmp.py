@@ -142,29 +142,19 @@ class DeviceOpenMPDataManager(DataManager):
 
     _Parallelizer = DeviceOmpizer
 
-    def _alloc_array_on_high_bw_mem(self, scope, obj, storage):
-        handle = storage._high_bw_mem.setdefault(scope, OrderedDict())
+    def _alloc_array_on_high_bw_mem(self, site, obj, storage):
+        super()._alloc_array_on_high_bw_mem(site, obj, storage)
 
-        if obj in handle:
-            return
+        alloc = self._Parallelizer._map_alloc(obj)
+        free = self._Parallelizer._map_delete(obj)
 
-        super(DeviceOpenMPDataManager, self)._alloc_array_on_high_bw_mem(scope, obj,
-                                                                         storage)
+        key = (obj, 'gpu-alloc')
+        storage.update(key, site, allocs=alloc, frees=free)
 
-        decl, alloc, free = handle[obj]
-
-        alloc = c.Collection([alloc, self._Parallelizer._map_alloc(obj)])
-        free = c.Collection([self._Parallelizer._map_delete(obj), free])
-
-        handle[obj] = (decl, alloc, free)
-
-    def _map_function_on_high_bw_mem(self, scope, obj, storage, read_only=False):
-        """Place a Function in the high bandwidth memory."""
-        handle = storage._high_bw_mem.setdefault(scope, OrderedDict())
-
-        if obj in handle:
-            return
-
+    def _map_function_on_high_bw_mem(self, site, obj, storage, read_only=False):
+        """
+        Place a Function in the high bandwidth memory.
+        """
         alloc = self._Parallelizer._map_to(obj)
 
         if read_only is False:
@@ -173,7 +163,7 @@ class DeviceOpenMPDataManager(DataManager):
         else:
             free = self._Parallelizer._map_delete(obj)
 
-        handle[obj] = (None, alloc, free)
+        storage.update(obj, site, allocs=alloc, frees=free)
 
     @iet_pass
     def place_ondevice(self, iet, **kwargs):
